@@ -30,8 +30,10 @@ COPY ./build.sh /home/FPSI/
 RUN chmod +x build.sh && \
     ./build.sh
 
-COPY ./bench1.sh\
-    ./bench2.sh\
+COPY ./fmap_bench.sh\
+    ./fmap_prefix_bench.sh\
+    ./fpsi_bench.sh\
+    ./fpsi_prefix_bench.sh\
     ./CMakeLists.txt\
     ./throttle.sh\
     ./README.md\
