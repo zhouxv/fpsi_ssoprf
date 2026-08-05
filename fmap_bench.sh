@@ -9,8 +9,8 @@ for n in "${ns[@]}"; do
   for dim in "${dims[@]}"; do
     for delta in "${deltas[@]}"; do
       ./build/fpsi -d $dim -delta $delta -nn $n -fm -try 3
-      echo 
     done
+    echo
   done
 done
 
