@@ -26,9 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY ./build.sh /home/FPSI/
-RUN chmod +x build.sh && \
-    ./build.sh
+COPY ./install_securejoin.sh\
+    ./install_volepsi.sh\
+    /home/FPSI/
+RUN chmod +x install_securejoin.sh && \
+    ./install_securejoin.sh
+
+RUN chmod +x install_volepsi.sh && \
+    ./install_volepsi.sh
 
 COPY ./fmap_bench.sh\
     ./fmap_prefix_bench.sh\
