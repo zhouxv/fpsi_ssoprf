@@ -8,7 +8,7 @@ printf "[ProType] [Dim] [Delta] [Size] [Com.(MB)] [Time(s)]\n"
 for n in "${ns[@]}"; do
   for dim in "${dims[@]}"; do
     for delta in "${deltas[@]}"; do
-      ./build/fpsi -d $dim -delta $delta -nn $n -fm -prefix -try 3
+      ../build/fpsi -d $dim -delta $delta -nn $n -fm -prefix -try 3
     done
     echo
   done

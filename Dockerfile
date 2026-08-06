@@ -35,16 +35,13 @@ RUN chmod +x install_securejoin.sh && \
 RUN chmod +x install_volepsi.sh && \
     ./install_volepsi.sh
 
-COPY ./fmap_bench.sh\
-    ./fmap_prefix_bench.sh\
-    ./fpsi_bench.sh\
-    ./fpsi_prefix_bench.sh\
-    ./CMakeLists.txt\
+COPY ./CMakeLists.txt\
     ./throttle.sh\
     ./README.md\
     /home/FPSI/
 COPY ./include/ /home/FPSI/include/
 COPY ./src/ /home/FPSI/src/
+COPY ./bench /home/FPSI/bench/
 
 RUN mkdir -p build && \
     cd build && \
