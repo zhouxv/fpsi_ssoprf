@@ -15,7 +15,7 @@ This repository provides the implementation and build scripts for fuzzy private 
 - Linux on **AMD64** Only
 - `cmake`, `make`, `g++ 13`
 - Docker (optional, for isolated builds)
-- Additional third-party libraries [secure-join](https://github.com/Visa-Research/secure-join.git) and [volePSI](https://github.com/ladnir/volepsi.git) (can be installed by the script [build.sh](./build.sh))
+- Additional third-party libraries [secure-join](https://github.com/Visa-Research/secure-join.git) and [volePSI](https://github.com/ladnir/volepsi.git) (can be installed by the scripts [install_securejoin.sh, install_volepsi.sh])
 
 - **Dependencies :**
 
@@ -39,9 +39,10 @@ libfmt-dev
 From the project root directory:
 
 ```bash
-./build.sh    # installs third-party dependencies if needed (about 10-15 mins)
+./install_securejoin.sh
+./install_volepsi.sh
 mkdir -p build && cd build
-cmake ..
+cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j
 
 # The executable will be located at ./build/fpsi
@@ -68,27 +69,73 @@ Below are the commonly used command-line flags. Flags use a leading dash (for ex
 
 | Flag | Meaning | Values / Notes |
 | --- | --- | --- |
-| `-d` | Dimension | integer |
-| `-m` | Metric | `0`: $L_\infty$, `1`: $L_1$, `2`: $L_2$ |
-| `-delta` | Distance threshold (δ) | recommended to be a power of 2 |
-| `-nn` | log2 of input set size (n) | tested values: `8`~`16` |
+| `-p` | Protocol | `1`: fuzzy mapping (default), `2`: prefix fuzzy mapping, `3`: fuzzy PSI, `4`: prefix fuzzy PSI |
+| `-d` | Dimension | positive integer; default `2` |
+| `-m` | FPSI metric | `0`: $L_\infty$ (default), `1`: $L_1$, `2`: $L_2$; used by `-p 3/4` |
+| `-delta` | Distance threshold (δ) | positive integer, default `10`; prefix protocols require matching entries in `include/param.h` |
+| `-nn` | log2 of input set size (n) | default `8`; tested values: `8`~`16` |
+| `-i` | Number of matching points | integer in `[0, set size]`; default `min(7, set size)` |
 | `-v` | Verbosity | `0`: off (default), `1`: info |
 | `-try` | Number of runs | integer, default `1` |
-| `-prefix` | Prefix optimization flag | `0`: off (default), `1`: on |
+| `-out` | CSV result file | optional; no CSV is written when omitted |
+
 
 ## Usage Examples
 
 Run a basic fuzzy PSI experiment:
 
 ```bash
-./fpsi -nn 8 -d 8 -delta 16 -v 1
+./build/fpsi -p 3 -m 0 -nn 8 -d 8 -delta 16 -v 1
 ```
 
 Enable prefix optimization:
 
 ```bash
-./fpsi -nn 8 -d 8 -delta 16 -v 1 -prefix 1
+./build/fpsi -p 4 -m 0 -nn 8 -d 8 -delta 16 -v 1
 ```
+
+Each result is printed on one line using the following columns:
+
+```text
+[Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Offline(s)] [Online(s)]
+```
+
+`Offline(s)` includes LocalMap/LocalMapPrefix, local PRF evaluation, and OKVS
+encoding. The sender and receiver execute their complete offline pipelines in
+parallel, and the reported value is the wall-clock time until both finish.
+Synthetic input generation is excluded, and the offline phase has no
+communication.
+
+Use `-out` to append a result to a CSV file that Excel can open directly:
+
+```bash
+./build/fpsi -p 3 -m 0 -nn 8 -d 8 -delta 16 -out fpsi.csv
+```
+
+Each protocol writes its CSV header alongside its own result output. Fmap CSV
+files omit the metric column, while FPSI CSV files include it.
+
+There are four standalone experiment scripts, one for each protocol:
+
+- `bench_fmap.sh` (`-p 1` by default)
+- `bench_fmap_prefix.sh` (`-p 2` by default)
+- `bench_fpsi.sh` (`-p 3` by default)
+- `bench_fpsi_prefix.sh` (`-p 4` by default)
+
+Scalar options (`-p`, `-i`, `-try`, and `-out`) consume one value. Matrix
+options (`-m`, `-nn`, `-d`, and `-delta`) consume a list of values up to the
+next option. For example:
+
+```bash
+./bench_fpsi_prefix.sh -p 4 -m 0 1 -nn 8 12 -d 2 6 \
+  -delta 10 60 -i 7 -try 3 -out fpsi-prefix.csv
+```
+
+Each command-line option replaces the corresponding script default. The
+scripts only expand the Cartesian product of the supplied lists; the `fpsi`
+program performs argument validation. Without `-out`, the script creates a
+timestamped CSV file beside the script in the project root; `-out` overrides
+that path.
 
 ------------------------------------------------------------------------
 

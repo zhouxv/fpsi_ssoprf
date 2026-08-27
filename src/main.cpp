@@ -11,9 +11,11 @@
 #include "libOTe/TwoChooseOne/Iknp/IknpOtExtSender.h"
 #include "mul.h"
 #include "mux.h"
+#include "param.h"
 #include "secure-join/Prf/AltModPrf.h"
 #include "secure-join/Prf/AltModPrfProto.h"
 #include "utils.h"
+#include <algorithm>
 #include <array>
 #include <coproto/Common/macoro.h>
 #include <coproto/Socket/AsioSocket.h>
@@ -26,6 +28,7 @@
 #include <cstring>
 #include <iostream>
 #include <libOTe/TwoChooseOne/Silent/SilentOtExtSender.h>
+#include <limits>
 #include <macoro/sync_wait.h>
 #include <macoro/when_all.h>
 #include <secure-join/Defines.h>
@@ -37,8 +40,150 @@ using namespace secJoin;
 
 std::map<std::string, TimerStat> timers;
 
+void inputHelper() {
+  std::cout << R"(Usage:
+  ./build/fpsi [-p <protocol>] [-m <metric>]
+               [-n <size> | -nn <log2-size>] [-d <dimension>]
+               [-delta <threshold>] [-i <matching-points>]
+               [-try <count>] [-out <results.csv>]
+
+Defaults:
+  -p 1, -m 0, -nn 8, -d 2, -delta 10, -try 1
+  -i min(7, set size)
+
+Protocols:
+  -p 1    fmap
+  -p 2    fmap-prefix
+  -p 3    fpsi
+  -p 4    fpsi-prefix
+
+Metrics (used by -p 3 and -p 4):
+  -m 0    Linf (default)
+  -m 1    L1
+  -m 2    L2
+
+Notes:
+  -delta must be a positive integer.
+  -i is the number of matching points (default: min(7, set size)).
+  -i must be between 0 and the actual set size.
+  Prefix protocols require parameter entries for 2 * delta.
+  Prefix L1/L2 additionally require a parameter entry for delta.
+  -out is optional; without it, no CSV file is written.
+
+Examples:
+  ./build/fpsi
+  ./build/fpsi -p 1 -nn 8 -d 2 -delta 10 -try 3
+  ./build/fpsi -p 4 -m 2 -nn 8 -d 6 -delta 10 -try 3 -out results.csv
+)";
+}
+
+bool validateExperimentArgs(const oc::CLP &cmd, int protocol, int metric) {
+
+  // An omitted option uses its default, but an explicitly written option must
+  // still provide a value. CLP's getOr() deliberately treats both cases alike.
+  constexpr std::array<const char *, 11> valueOptions = {
+      "p", "m", "n", "nn", "d", "delta", "i", "try", "out", "v", "s"};
+  for (const auto *option : valueOptions) {
+    if (cmd.isSet(option) && !cmd.hasValue(option)) {
+      std::cerr << "missing value for -" << option << std::endl;
+      return false;
+    }
+  }
+
+  if (protocol < 1 || protocol > 4) {
+    std::cerr << "invalid protocol: use -p 1 (fmap), -p 2 (fmap-prefix), "
+                 "-p 3 (fpsi), or -p 4 (fpsi-prefix)"
+              << std::endl;
+    return false;
+  }
+
+  if ((protocol == 3 || protocol == 4) && (metric < 0 || metric > 2)) {
+    std::cerr << "invalid metric: use -m 0 (Linf), -m 1 (L1), or -m 2 (L2)"
+              << std::endl;
+    return false;
+  }
+
+  // -n is the actual set size, while -nn is its base-2 logarithm.
+  if (cmd.isSet("n") && cmd.isSet("nn")) {
+    std::cerr << "invalid size: use either -n or -nn, not both" << std::endl;
+    return false;
+  }
+
+  u64 setSize = 0;
+  if (cmd.isSet("n")) {
+    const long long explicitSetSize = cmd.getOr<long long>("n", 1 << 8);
+    if (explicitSetSize <= 0) {
+      std::cerr << "invalid size: -n must be a positive integer" << std::endl;
+      return false;
+    }
+    setSize = static_cast<u64>(explicitSetSize);
+  } else {
+    const int logSetSize = cmd.getOr("nn", 8);
+    if (logSetSize < 0 || logSetSize >= 63) {
+      std::cerr << "invalid size: -nn must be between 0 and 62" << std::endl;
+      return false;
+    }
+    setSize = 1ull << logSetSize;
+  }
+
+  const int dimension = cmd.getOr("d", 2);
+  if (dimension <= 0) {
+    std::cerr << "invalid dimension: -d must be a positive integer"
+              << std::endl;
+    return false;
+  }
+
+  const int numTry = cmd.getOr("try", 1);
+  if (numTry <= 0) {
+    std::cerr << "invalid repetition count: -try must be a positive integer"
+              << std::endl;
+    return false;
+  }
+
+  // Cap the default at the set size so small smoke tests remain valid.
+  const int matchingPoints =
+      cmd.getOr("i", static_cast<int>(std::min<u64>(7, setSize)));
+  if (matchingPoints < 0 || static_cast<u64>(matchingPoints) > setSize) {
+    std::cerr << "invalid matching-point count: -i must be between 0 and "
+              << setSize << std::endl;
+    return false;
+  }
+
+  const int delta = cmd.getOr("delta", 10);
+  if (delta <= 0) {
+    std::cerr << "invalid delta: use a positive integer" << std::endl;
+    return false;
+  }
+
+  if (protocol != 2 && protocol != 4) {
+    return true;
+  }
+
+  // Prefix protocols use precomputed decomposition parameters from param.h.
+  const auto hasPrefixParams = [](int key) {
+    return prefixLenMap.contains(key) && prefixNumMap.contains(key);
+  };
+
+  if (delta > std::numeric_limits<int>::max() / 2 ||
+      !hasPrefixParams(2 * delta)) {
+    std::cerr << "unsupported delta for prefix protocol: missing parameters "
+                 "for 2 * delta"
+              << std::endl;
+    return false;
+  }
+
+  if (protocol == 4 && metric != 0 && !hasPrefixParams(delta)) {
+    std::cerr << "unsupported delta for prefix L1/L2 protocol: missing "
+                 "parameters for delta"
+              << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
 void AltModWPrf_proto_bench(const oc::CLP &cmd) {
-  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 8));
   u64 trials = cmd.getOr("trials", 1);
   bool nt = cmd.getOr("nt", 1);
   auto useOle = cmd.isSet("ole");
@@ -871,31 +1016,32 @@ int main(int argc, char **argv) {
 
   // eq_test();
 
-  if (cmd.isSet("fm")) {
-    if (cmd.isSet("prefix")) {
-      fuzzyMapPrefix(cmd);
-    } else {
-      fuzzyMap(cmd);
-    }
+  const int protocol = cmd.getOr("p", 1);
+  const int metric = cmd.getOr("m", 0);
+
+  if (cmd.isSet("h") || cmd.isSet("help")) {
+    inputHelper();
     return 0;
   }
 
-  int lp = cmd.getOr("p", 0);
+  if (!validateExperimentArgs(cmd, protocol, metric)) {
+    inputHelper();
+    return 1;
+  }
 
-  if (cmd.isSet("prefix")) {
-    if (lp != 0) {
-      fuzzyPsiLpPrefix(cmd);
-    } else {
-      fuzzyPsiPrefix(cmd);
-    }
-    return 0;
-  } else {
-    if (lp != 0) {
-      fuzzyPsiLp(cmd);
-    } else {
-      fuzzyPsi(cmd);
-    }
-    return 0;
+  switch (protocol) {
+  case 1:
+    fuzzyMap(cmd);
+    break;
+  case 2:
+    fuzzyMapPrefix(cmd);
+    break;
+  case 3:
+    metric == 0 ? fuzzyPsi(cmd) : fuzzyPsiLp(cmd);
+    break;
+  case 4:
+    metric == 0 ? fuzzyPsiPrefix(cmd) : fuzzyPsiLpPrefix(cmd);
+    break;
   }
 
   return 0;

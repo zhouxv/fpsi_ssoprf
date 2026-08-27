@@ -12,9 +12,13 @@
 #include <cryptoTools/Common/block.h>
 #include <cstdlib>
 #include <format>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <macoro/sync_wait.h>
 #include <macoro/when_all.h>
+#include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -112,6 +116,32 @@ void LocalMap(std::vector<std::vector<u64>> &inputs, std::vector<block> &pid,
   }
   Hash(listKey);
 }
+
+namespace {
+
+// Perform all local preprocessing for one party. Each party owns its PRF and
+// OKVS instances so the two offline pipelines can run safely in parallel.
+void prepareFuzzyMapOfflineParty(std::vector<std::vector<u64>> &input,
+                                 std::vector<block> &pid,
+                                 std::vector<block> &listKey,
+                                 std::vector<block> &listVal,
+                                 std::vector<block> &encoding,
+                                 u64 okvsInputSize, int delta,
+                                 AltModPrf::KeyType prfKey) {
+  LocalMap(input, pid, listKey, listVal, delta);
+
+  AltModPrf prf(prfKey);
+  std::vector<block> prfVals(listKey.size());
+  prf.eval(listKey, prfVals);
+  for (size_t i = 0; i < listKey.size(); ++i) {
+    listVal[i] ^= prfVals[i];
+  }
+
+  OKVS okvs(okvsInputSize);
+  encoding = okvs.encode(listKey, listVal);
+}
+
+} // namespace
 
 void FuzzyMap(u64 n, size_t d, int delta,
               std::vector<std::vector<u64>> &sendSet,
@@ -276,14 +306,12 @@ void FuzzyMap(u64 n, size_t d, int delta,
 }
 
 void fuzzyPsi(const oc::CLP &cmd) {
-  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 8));
   size_t d = cmd.getOr("d", 2);
-  int delta = cmd.getOr("delta", 2);
+  int delta = cmd.getOr("delta", 10);
   int verbose = cmd.getOr("v", 0);
-
   int numTry = cmd.getOr("try", 1);
-
-  int interSize = cmd.getOr("nn", 4);
+  u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
 
   std::vector<std::vector<u64>> sendSet;
   std::vector<block> sendPid;
@@ -334,40 +362,30 @@ void fuzzyPsi(const oc::CLP &cmd) {
     }
   }
 
-  std::thread sendLocalMap(
-      [&] { LocalMap(sendSet, sendPid, sendListKey, sendListVal, delta); });
-  std::thread recvLocalMap(
-      [&] { LocalMap(recvSet, recvPid, recvListKey, recvListVal, delta); });
+  oc::Timer time;
+  auto a = time.setTimePoint("offline begin");
 
-  sendLocalMap.join();
-  recvLocalMap.join();
-
-  auto preOKVS = OKVS(n * d * (2 * delta + 1));
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
       block(0, 2),
       block(0, 3),
       block(0, 4),
   });
-  AltModPrf prf(senderKey);
-  // local encoding from set, totally offline
+  const u64 okvsInputSize = n * d * (2 * delta + 1);
+  std::vector<block> senderOKVS;
+  std::vector<block> recverOKVS;
 
-  // fmap start
-  oc::Timer time;
+  std::thread senderOffline([&] {
+    prepareFuzzyMapOfflineParty(sendSet, sendPid, sendListKey, sendListVal,
+                                senderOKVS, okvsInputSize, delta, senderKey);
+  });
+  std::thread receiverOffline([&] {
+    prepareFuzzyMapOfflineParty(recvSet, recvPid, recvListKey, recvListVal,
+                                recverOKVS, okvsInputSize, delta, senderKey);
+  });
 
-  time.setTimePoint("begin");
-
-  std::vector<block> senderPrfVals(sendListKey.size());
-  std::vector<block> recverPrfVals(recvListKey.size());
-  prf.eval(sendListKey, senderPrfVals);
-  prf.eval(recvListKey, recverPrfVals);
-  for (size_t i = 0; i < sendListKey.size(); i++) {
-    sendListVal[i] = sendListVal[i] ^ senderPrfVals[i];
-    recvListVal[i] = recvListVal[i] ^ recverPrfVals[i];
-  }
-
-  auto senderOKVS = preOKVS.encode(sendListKey, sendListVal);
-  auto recverOKVS = preOKVS.encode(recvListKey, recvListVal);
+  senderOffline.join();
+  receiverOffline.join();
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
 
@@ -565,10 +583,31 @@ void fuzzyPsi(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  std::cout << std::format("[ours]    L0    {:^5}  {:^5}  {:^5}  {:^10.3f} "
-                           "{:^10.3f}",
-                           d, delta, n, comm, comp)
+  auto offline =
+      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
+      double(1000 * 1000);
+
+  std::cout << std::format("[fpsi] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
+                           "{:^10.3f} {:^10.3f}",
+                           "Linf", d, delta, n, comm, offline, comp)
             << std::endl;
+
+  if (cmd.isSet("out")) {
+    const auto outputPath = cmd.get<std::string>("out");
+    std::ifstream existing(outputPath, std::ios::binary | std::ios::ate);
+    const bool writeHeader = !existing || existing.tellg() == 0;
+    std::ofstream output(outputPath, std::ios::app);
+    if (!output) {
+      throw std::runtime_error("failed to open result file: " + outputPath);
+    }
+    if (writeHeader) {
+      output
+          << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+    }
+    output << "fpsi,Linf," << d << ',' << delta << ',' << n << ',' << std::fixed
+           << std::setprecision(3) << comm << ',' << offline << ',' << comp
+           << '\n';
+  }
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
   // sock2[0].bytesReceived() + sock2[0].bytesSent()) / 1024.0 / 1024.0 << " MB,
   // "
@@ -577,11 +616,11 @@ void fuzzyPsi(const oc::CLP &cmd) {
 }
 
 void fuzzyPsiLp(const oc::CLP &cmd) {
-  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 8));
   size_t d = cmd.getOr("d", 2);
-  int delta = cmd.getOr("delta", 2);
-  int lp = cmd.getOr("p", 2);
-  int interSize = cmd.getOr("nn", 4);
+  int delta = cmd.getOr("delta", 10);
+  int lp = cmd.getOr("m", 2);
+  u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
   int verbose = cmd.getOr("v", 0);
   int numTry = cmd.getOr("try", 1);
 
@@ -641,40 +680,30 @@ void fuzzyPsiLp(const oc::CLP &cmd) {
     }
   }
 
-  std::thread sendLocalMap(
-      [&] { LocalMap(sendSet, sendPid, sendListKey, sendListVal, delta); });
-  std::thread recvLocalMap(
-      [&] { LocalMap(recvSet, recvPid, recvListKey, recvListVal, delta); });
+  oc::Timer time;
+  auto a = time.setTimePoint("offline begin");
 
-  sendLocalMap.join();
-  recvLocalMap.join();
-
-  auto preOKVS = OKVS(n * d * (2 * delta + 1));
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
       block(0, 2),
       block(0, 3),
       block(0, 4),
   });
-  AltModPrf prf(senderKey);
-  // local encoding from set, totally offline
+  const u64 okvsInputSize = n * d * (2 * delta + 1);
+  std::vector<block> senderOKVS;
+  std::vector<block> recverOKVS;
 
-  // fmap start
-  oc::Timer time;
+  std::thread senderOffline([&] {
+    prepareFuzzyMapOfflineParty(sendSet, sendPid, sendListKey, sendListVal,
+                                senderOKVS, okvsInputSize, delta, senderKey);
+  });
+  std::thread receiverOffline([&] {
+    prepareFuzzyMapOfflineParty(recvSet, recvPid, recvListKey, recvListVal,
+                                recverOKVS, okvsInputSize, delta, senderKey);
+  });
 
-  time.setTimePoint("begin");
-
-  std::vector<block> senderPrfVals(sendListKey.size());
-  std::vector<block> recverPrfVals(recvListKey.size());
-  prf.eval(sendListKey, senderPrfVals);
-  prf.eval(recvListKey, recverPrfVals);
-  for (size_t i = 0; i < sendListKey.size(); i++) {
-    sendListVal[i] = sendListVal[i] ^ senderPrfVals[i];
-    recvListVal[i] = recvListVal[i] ^ recverPrfVals[i];
-  }
-
-  auto senderOKVS = preOKVS.encode(sendListKey, sendListVal);
-  auto recverOKVS = preOKVS.encode(recvListKey, recvListVal);
+  senderOffline.join();
+  receiverOffline.join();
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
 
@@ -914,16 +943,31 @@ void fuzzyPsiLp(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  if (lp == 1) {
-    std::cout << std::format("[ours]    L1    {:^5}  {:^5}  {:^5}  {:^10.3f} "
-                             "{:^10.3f}",
-                             d, delta, n, comm, comp)
-              << std::endl;
-  } else {
-    std::cout << std::format("[ours]    L2    {:^5}  {:^5}  {:^5}  {:^10.3f} "
-                             "{:^10.3f}",
-                             d, delta, n, comm, comp)
-              << std::endl;
+  auto offline =
+      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
+      double(1000 * 1000);
+
+  const auto metric = lp == 1 ? "L1" : "L2";
+  std::cout << std::format("[fpsi] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
+                           "{:^10.3f} {:^10.3f}",
+                           metric, d, delta, n, comm, offline, comp)
+            << std::endl;
+
+  if (cmd.isSet("out")) {
+    const auto outputPath = cmd.get<std::string>("out");
+    std::ifstream existing(outputPath, std::ios::binary | std::ios::ate);
+    const bool writeHeader = !existing || existing.tellg() == 0;
+    std::ofstream output(outputPath, std::ios::app);
+    if (!output) {
+      throw std::runtime_error("failed to open result file: " + outputPath);
+    }
+    if (writeHeader) {
+      output
+          << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+    }
+    output << "fpsi," << metric << ',' << d << ',' << delta << ',' << n << ','
+           << std::fixed << std::setprecision(3) << comm << ',' << offline
+           << ',' << comp << '\n';
   }
 
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
@@ -935,14 +979,14 @@ void fuzzyPsiLp(const oc::CLP &cmd) {
 
 void fuzzyMap(const oc::CLP &cmd) {
   /* #region setup parameters */
-  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 8));
   size_t d = cmd.getOr("d", 2);
-  int delta = cmd.getOr("delta", 2);
-  int interSize = cmd.getOr("nn", 4);
+  int delta = cmd.getOr("delta", 10);
+  u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
   int verbose = cmd.getOr("v", 0);
-  int numTry = cmd.getOr("try", 3);
+  int numTry = cmd.getOr("try", 1);
 
-  int lp = cmd.getOr("p", 2);
+  int lp = cmd.getOr("m", 2);
 
   u64 delta_p = std::pow(delta, lp);
   int prefixLen = static_cast<int>(std::ceil(std::log2(delta_p + 1)));
@@ -1006,44 +1050,31 @@ void fuzzyMap(const oc::CLP &cmd) {
   }
   /* #endregion */
 
-  /* #region generate local maps for sender and receiver */
-  std::thread sendLocalMap(
-      [&] { LocalMap(sendSet, sendPid, sendListKey, sendListVal, delta); });
-  std::thread recvLocalMap(
-      [&] { LocalMap(recvSet, recvPid, recvListKey, recvListVal, delta); });
+  oc::Timer time;
+  auto a = time.setTimePoint("offline begin");
 
-  sendLocalMap.join();
-  recvLocalMap.join();
-
-  auto preOKVS = OKVS(n * d * (2 * delta + 1));
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
       block(0, 2),
       block(0, 3),
       block(0, 4),
   });
-  AltModPrf prf(senderKey);
-  /* #endregion */
-  // local encoding from set, totally offline
+  const u64 okvsInputSize = n * d * (2 * delta + 1);
+  std::vector<block> senderOKVS;
+  std::vector<block> recverOKVS;
 
-  oc::Timer time;
+  // Run each party's complete local preprocessing pipeline concurrently.
+  std::thread senderOffline([&] {
+    prepareFuzzyMapOfflineParty(sendSet, sendPid, sendListKey, sendListVal,
+                                senderOKVS, okvsInputSize, delta, senderKey);
+  });
+  std::thread receiverOffline([&] {
+    prepareFuzzyMapOfflineParty(recvSet, recvPid, recvListKey, recvListVal,
+                                recverOKVS, okvsInputSize, delta, senderKey);
+  });
 
-  time.setTimePoint("begin");
-
-  /*
-  fmap offline preprocess OKVS
-  */
-  std::vector<block> senderPrfVals(sendListKey.size());
-  std::vector<block> recverPrfVals(recvListKey.size());
-  prf.eval(sendListKey, senderPrfVals);
-  prf.eval(recvListKey, recverPrfVals);
-  for (size_t i = 0; i < sendListKey.size(); i++) {
-    sendListVal[i] = sendListVal[i] ^ senderPrfVals[i];
-    recvListVal[i] = recvListVal[i] ^ recverPrfVals[i];
-  }
-
-  auto senderOKVS = preOKVS.encode(sendListKey, sendListVal);
-  auto recverOKVS = preOKVS.encode(recvListKey, recvListVal);
+  senderOffline.join();
+  receiverOffline.join();
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
 
@@ -1080,8 +1111,28 @@ void fuzzyMap(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  std::cout << std::format("[fmap]  {:^5}  {:^5}  {:^5}  {:^10.3f} "
-                           "{:^10.3f}",
-                           d, delta, n, comm, comp)
+  auto offline =
+      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
+      double(1000 * 1000);
+
+  std::cout << std::format("[fmap] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
+                           "{:^10.3f} {:^10.3f}",
+                           "-", d, delta, n, comm, offline, comp)
             << std::endl;
+
+  if (cmd.isSet("out")) {
+    const auto outputPath = cmd.get<std::string>("out");
+    std::ifstream existing(outputPath, std::ios::binary | std::ios::ate);
+    const bool writeHeader = !existing || existing.tellg() == 0;
+    std::ofstream output(outputPath, std::ios::app);
+    if (!output) {
+      throw std::runtime_error("failed to open result file: " + outputPath);
+    }
+    if (writeHeader) {
+      output << "Protocol,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+    }
+    output << "fmap," << d << ',' << delta << ',' << n << ',' << std::fixed
+           << std::setprecision(3) << comm << ',' << offline << ',' << comp
+           << '\n';
+  }
 }

@@ -38,12 +38,15 @@ RUN chmod +x install_volepsi.sh && \
 COPY ./CMakeLists.txt\
     ./throttle.sh\
     ./README.md\
+    ./bench_fmap.sh\
+    ./bench_fmap_prefix.sh\
+    ./bench_fpsi.sh\
+    ./bench_fpsi_prefix.sh\
     /home/FPSI/
 COPY ./include/ /home/FPSI/include/
 COPY ./src/ /home/FPSI/src/
-COPY ./bench /home/FPSI/bench/
 
 RUN mkdir -p build && \
     cd build && \
-    cmake .. && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j
