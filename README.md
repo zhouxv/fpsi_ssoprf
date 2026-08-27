@@ -123,38 +123,6 @@ Run the non-prefix offline preprocessing independently:
 ./build/fpsi -p 5 -nn 12 -d 6 -delta 60 -try 3 -out fmap-offline.csv
 ```
 
-Each protocol writes its CSV header alongside its own result output. Fmap CSV
-files omit the metric column, while FPSI CSV files include it.
-
-There are six standalone experiment scripts:
-
-- `bench_fmap.sh` (`-p 1` by default)
-- `bench_fmap_prefix.sh` (`-p 2` by default)
-- `bench_fpsi.sh` (`-p 3` by default)
-- `bench_fpsi_prefix.sh` (`-p 4` by default)
-- `bench_fmap_offline.sh` (`-p 5` by default)
-- `bench_fmap_prefix_offline.sh` (`-p 6` by default)
-
-Scalar options (`-p`, `-i`, `-try`, and `-out`) consume one value. Matrix
-options (`-m`, `-nn`, `-d`, and `-delta`) consume a list of values up to the
-next option. The two offline scripts use only `-p`, `-nn`, `-d`, `-delta`,
-`-try`, and `-out`, because their workload has no metric or matching-point
-dimension. For example:
-
-```bash
-./bench_fpsi_prefix.sh -p 4 -m 0 1 -nn 8 12 -d 2 6 \
-  -delta 10 60 -i 7 -try 3 -out fpsi-prefix.csv
-
-./bench_fmap_prefix_offline.sh -nn 8 12 -d 2 6 \
-  -delta 10 60 -try 3 -out fmap-prefix-offline.csv
-```
-
-Each command-line option replaces the corresponding script default. The
-scripts only expand the Cartesian product of the supplied lists; the `fpsi`
-program performs argument validation. Without `-out`, the script creates a
-timestamped CSV file beside the script in the project root; `-out` overrides
-that path.
-
 ------------------------------------------------------------------------
 
 ## Baseline Implementations
