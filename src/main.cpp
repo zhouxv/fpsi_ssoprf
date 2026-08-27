@@ -56,6 +56,8 @@ Protocols:
   -p 2    fmap-prefix
   -p 3    fpsi
   -p 4    fpsi-prefix
+  -p 5    fmap offline preprocessing only
+  -p 6    fmap-prefix offline preprocessing only
 
 Metrics (used by -p 3 and -p 4):
   -m 0    Linf (default)
@@ -66,14 +68,17 @@ Notes:
   -delta must be a positive integer.
   -i is the number of matching points (default: min(7, set size)).
   -i must be between 0 and the actual set size.
-  Prefix protocols require parameter entries for 2 * delta.
+  Prefix protocols (-p 2, 4, and 6) require parameters for 2 * delta.
   Prefix L1/L2 additionally require a parameter entry for delta.
+  -p 5 and -p 6 measure LocalMap, local PRF evaluation, and OKVS encoding.
+  Synthetic input generation is excluded from their Offline(s) value.
   -out is optional; without it, no CSV file is written.
 
 Examples:
   ./build/fpsi
   ./build/fpsi -p 1 -nn 8 -d 2 -delta 10 -try 3
   ./build/fpsi -p 4 -m 2 -nn 8 -d 6 -delta 10 -try 3 -out results.csv
+  ./build/fpsi -p 5 -nn 12 -d 6 -delta 60 -try 3
 )";
 }
 
@@ -90,9 +95,10 @@ bool validateExperimentArgs(const oc::CLP &cmd, int protocol, int metric) {
     }
   }
 
-  if (protocol < 1 || protocol > 4) {
+  if (protocol < 1 || protocol > 6) {
     std::cerr << "invalid protocol: use -p 1 (fmap), -p 2 (fmap-prefix), "
-                 "-p 3 (fpsi), or -p 4 (fpsi-prefix)"
+                 "-p 3 (fpsi), -p 4 (fpsi-prefix), -p 5 (fmap offline), "
+                 "or -p 6 (fmap-prefix offline)"
               << std::endl;
     return false;
   }
@@ -155,7 +161,7 @@ bool validateExperimentArgs(const oc::CLP &cmd, int protocol, int metric) {
     return false;
   }
 
-  if (protocol != 2 && protocol != 4) {
+  if (protocol != 2 && protocol != 4 && protocol != 6) {
     return true;
   }
 
@@ -1041,6 +1047,12 @@ int main(int argc, char **argv) {
     break;
   case 4:
     metric == 0 ? fuzzyPsiPrefix(cmd) : fuzzyPsiLpPrefix(cmd);
+    break;
+  case 5:
+    fuzzyMapOffline(cmd);
+    break;
+  case 6:
+    fuzzyMapPrefixOffline(cmd);
     break;
   }
 

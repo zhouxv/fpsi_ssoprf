@@ -9,6 +9,7 @@
 #include "param.h"
 #include "secure-join/Prf/AltModPrf.h"
 #include "utils.h"
+#include <chrono>
 #include <coproto/Socket/AsioSocket.h>
 #include <cryptoTools/Common/Defines.h>
 #include <cryptoTools/Common/block.h>
@@ -464,7 +465,7 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   }
 
   oc::Timer time;
-  auto a = time.setTimePoint("offline begin");
+  time.setTimePoint("offline begin");
 
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
@@ -730,13 +731,9 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  auto offline =
-      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
-      double(1000 * 1000);
-
-  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
-                           "{:^10.3f} {:^10.3f}",
-                           "Linf", d, delta, n, comm, offline, comp)
+  std::cout << std::format(
+                   "[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} {:^10.3f}",
+                   "Linf", d, delta, n, comm, comp)
             << std::endl;
 
   if (cmd.isSet("out")) {
@@ -748,12 +745,10 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
       throw std::runtime_error("failed to open result file: " + outputPath);
     }
     if (writeHeader) {
-      output
-          << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+      output << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Online(s)\n";
     }
     output << "fpsi-prefix,Linf," << d << ',' << delta << ',' << n << ','
-           << std::fixed << std::setprecision(3) << comm << ',' << offline
-           << ',' << comp << '\n';
+           << std::fixed << std::setprecision(3) << comm << ',' << comp << '\n';
   }
 
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
@@ -847,7 +842,7 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   }
 
   oc::Timer time;
-  auto a = time.setTimePoint("offline begin");
+  time.setTimePoint("offline begin");
 
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
@@ -996,21 +991,8 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
 
       std::vector<u64> v_A(n * d * prefixLenUpDown * lp);
 
-      oc::Timer localTime;
-
-      auto start = localTime.setTimePoint("b2a start");
-
       B2aSender b2aSender(n * d * prefixLenUpDown * lp, &sock[0]);
       b2aSender.b2a(v, v_A);
-
-      auto end = localTime.setTimePoint("b2a done");
-
-      auto dt =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-              .count() /
-          double(1000);
-
-      // std::cout << "b2a time: " << dt << " ms" << std::endl;
 
       std::vector<u64> sumDis(n * d * 2 * halfprefixLen, 0);
       std::vector<u64> e(n * d * 2 * halfprefixLen, 0);
@@ -1324,14 +1306,10 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  auto offline =
-      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
-      double(1000 * 1000);
-
   const auto metric = lp == 1 ? "L1" : "L2";
-  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
-                           "{:^10.3f} {:^10.3f}",
-                           metric, d, delta, n, comm, offline, comp)
+  std::cout << std::format(
+                   "[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} {:^10.3f}",
+                   metric, d, delta, n, comm, comp)
             << std::endl;
 
   if (cmd.isSet("out")) {
@@ -1343,12 +1321,11 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
       throw std::runtime_error("failed to open result file: " + outputPath);
     }
     if (writeHeader) {
-      output
-          << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+      output << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Online(s)\n";
     }
     output << "fpsi-prefix," << metric << ',' << d << ',' << delta << ',' << n
-           << ',' << std::fixed << std::setprecision(3) << comm << ','
-           << offline << ',' << comp << '\n';
+           << ',' << std::fixed << std::setprecision(3) << comm << ',' << comp
+           << '\n';
   }
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
   // sock2[0].bytesReceived() + sock2[0].bytesSent()) / 1024.0 / 1024.0 << " MB,
@@ -1440,7 +1417,7 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
   }
 
   oc::Timer time;
-  auto a = time.setTimePoint("offline begin");
+  time.setTimePoint("offline begin");
 
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
@@ -1452,7 +1429,6 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
   std::vector<block> senderOKVS;
   std::vector<block> recverOKVS;
 
-  // Run each party's complete local preprocessing pipeline concurrently.
   std::thread senderOffline([&] {
     prepareFuzzyMapPrefixOfflineParty(sendSet, sendPid, sendListKey,
                                       sendListVal, senderOKVS, okvsInputSize,
@@ -1520,13 +1496,9 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
   comp /= numTry;
   comm /= numTry;
 
-  auto offline =
-      std::chrono::duration_cast<std::chrono::microseconds>(s - a).count() /
-      double(1000 * 1000);
-
-  std::cout << std::format("[fmap-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} "
-                           "{:^10.3f} {:^10.3f}",
-                           "-", d, delta, n, comm, offline, comp)
+  std::cout << std::format(
+                   "[fmap-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} {:^10.3f}",
+                   "-", d, delta, n, comm, comp)
             << std::endl;
 
   if (cmd.isSet("out")) {
@@ -1538,10 +1510,103 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
       throw std::runtime_error("failed to open result file: " + outputPath);
     }
     if (writeHeader) {
-      output << "Protocol,Dim,Delta,Size,Com.(MB),Offline(s),Online(s)\n";
+      output << "Protocol,Dim,Delta,Size,Com.(MB),Online(s)\n";
     }
     output << "fmap-prefix," << d << ',' << delta << ',' << n << ','
-           << std::fixed << std::setprecision(3) << comm << ',' << offline
-           << ',' << comp << '\n';
+           << std::fixed << std::setprecision(3) << comm << ',' << comp << '\n';
+  }
+}
+
+void fuzzyMapPrefixOffline(const oc::CLP &cmd) {
+  u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 8));
+  size_t d = cmd.getOr("d", 2);
+  int delta = cmd.getOr("delta", 10);
+  int numTry = cmd.getOr("try", 1);
+  int prefixNum = prefixNumMap.at(2 * delta);
+
+  double offlineSeconds = 0;
+
+  for (int tryIdx = 0; tryIdx < numTry; tryIdx++) {
+    std::vector<std::vector<u64>> sendSet;
+    std::vector<block> sendPid;
+    std::vector<block> sendListKey;
+    std::vector<block> sendListVal;
+
+    PRNG prng(sysRandomSeed());
+
+    for (u64 i = 0; i < n; i++) {
+      std::vector<u64> tmp;
+      for (u64 j = 0; j < d - 1; j++) {
+        tmp.push_back(prng.get<u64>() + 2 * delta);
+      }
+      tmp.push_back(prng.get<u64>() +
+                    2 * delta); // make sure there are some differences
+      sendSet.push_back(tmp);
+    }
+
+    std::vector<std::vector<u64>> recvSet;
+    std::vector<block> recvPid;
+    std::vector<block> recvListKey;
+    std::vector<block> recvListVal;
+
+    for (u64 i = 0; i < n; i++) {
+      std::vector<u64> tmp;
+      for (u64 j = 0; j < d - 1; j++) {
+        tmp.push_back(prng.get<u64>() + 2 * delta);
+      }
+      tmp.push_back(prng.get<u64>() +
+                    2 * delta); // make sure there are some differences
+      recvSet.push_back(tmp);
+    }
+
+    AltModPrf::KeyType senderKey = AltModPrf::KeyType({
+        block(0, 1),
+        block(0, 2),
+        block(0, 3),
+        block(0, 4),
+    });
+    const u64 okvsInputSize = 2 * n * d * prefixNum;
+    std::vector<block> senderOKVS;
+    std::vector<block> recverOKVS;
+
+    const auto begin = std::chrono::steady_clock::now();
+
+    std::thread senderOffline([&] {
+      prepareFuzzyMapPrefixOfflineParty(sendSet, sendPid, sendListKey,
+                                        sendListVal, senderOKVS, okvsInputSize,
+                                        delta, senderKey);
+    });
+    std::thread receiverOffline([&] {
+      prepareFuzzyMapPrefixOfflineParty(recvSet, recvPid, recvListKey,
+                                        recvListVal, recverOKVS, okvsInputSize,
+                                        delta, senderKey);
+    });
+
+    senderOffline.join();
+    receiverOffline.join();
+
+    const auto end = std::chrono::steady_clock::now();
+    offlineSeconds += std::chrono::duration<double>(end - begin).count();
+  }
+
+  const double offline = offlineSeconds / numTry;
+
+  std::cout << std::format("[fmap-prefix-offline] {:^5} {:^5} {:^5} {:^10.3f}",
+                           d, delta, n, offline)
+            << std::endl;
+
+  if (cmd.isSet("out")) {
+    const auto outputPath = cmd.get<std::string>("out");
+    std::ifstream existing(outputPath, std::ios::binary | std::ios::ate);
+    const bool writeHeader = !existing || existing.tellg() == 0;
+    std::ofstream output(outputPath, std::ios::app);
+    if (!output) {
+      throw std::runtime_error("failed to open result file: " + outputPath);
+    }
+    if (writeHeader) {
+      output << "Protocol,Dim,Delta,Size,Offline(s)\n";
+    }
+    output << "fmap-prefix-offline," << d << ',' << delta << ',' << n << ','
+           << std::fixed << std::setprecision(3) << offline << '\n';
   }
 }

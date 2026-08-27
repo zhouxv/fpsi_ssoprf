@@ -13,3 +13,5 @@ void fuzzyPsiPrefix(const oc::CLP &cmd);
 void fuzzyPsiLpPrefix(const oc::CLP &cmd);
 
 void fuzzyMapPrefix(const oc::CLP &cmd);
+
+void fuzzyMapPrefixOffline(const oc::CLP &cmd);

@@ -13,3 +13,5 @@ void fuzzyPsi(const oc::CLP &cmd);
 void fuzzyPsiLp(const oc::CLP &cmd);
 
 void fuzzyMap(const oc::CLP &cmd);
+
+void fuzzyMapOffline(const oc::CLP &cmd);

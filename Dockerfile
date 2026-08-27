@@ -42,9 +42,12 @@ COPY ./CMakeLists.txt\
     ./bench_fmap_prefix.sh\
     ./bench_fpsi.sh\
     ./bench_fpsi_prefix.sh\
+    ./bench_fmap_offline.sh\
+    ./bench_fmap_prefix_offline.sh\
     /home/FPSI/
 COPY ./include/ /home/FPSI/include/
 COPY ./src/ /home/FPSI/src/
+RUN chmod +x *.sh
 
 RUN mkdir -p build && \
     cd build && \

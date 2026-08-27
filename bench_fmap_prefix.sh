@@ -67,13 +67,14 @@ if [[ -z "${output_file}" ]]; then
   case "${protocol}" in
   1) protocol_name="fmap" ;; 2) protocol_name="fmap_prefix" ;;
   3) protocol_name="fpsi" ;; 4) protocol_name="fpsi_prefix" ;;
+  5) protocol_name="fmap_offline" ;; 6) protocol_name="fmap_prefix_offline" ;;
   *) protocol_name="benchmark" ;;
   esac
   output_file="${SCRIPT_DIR}/${protocol_name}_results_$(date +%Y%m%d_%H%M%S).csv"
 fi
 
 
-printf "[Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Offline(s)] [Online(s)]\n"
+printf "[Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Online(s)]\n"
 
 # Execute one Cartesian-product entry and append its row to the same CSV file.
 run_case() {
