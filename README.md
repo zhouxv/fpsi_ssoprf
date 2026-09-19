@@ -53,12 +53,12 @@ make -j
 Use Docker for an isolated or reproducible build environment:
 
 ```bash
-docker build -t fpsi_sp .
-docker tag fpsi_sp:latest blueobsidian/fpsi_sp:latest
+docker build -t fpsi_ssoprf .
+docker tag fpsi_ssoprf:latest blueobsidian/fpsi_ssoprf:latest
 
 docker run -it --name <your-container-name> --cap-add=NET_ADMIN --memory=512g <your-image-name>
-docker run -dit --name fpsi_sp --cap-add=NET_ADMIN fpsi_sp:latest
-docker pull blueobsidian/fpsi_sp:latest
+docker run -dit --name fpsi_ssoprf --cap-add=NET_ADMIN fpsi_ssoprf:latest
+docker pull blueobsidian/fpsi_ssoprf:latest
 
 docker exec -it <your-container-name> bash
 ```

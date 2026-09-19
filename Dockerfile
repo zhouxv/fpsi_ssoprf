@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-WORKDIR /home/FPSI
+WORKDIR /workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -20,15 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nasm \
     libssl-dev \
     libgmp-dev \
-    wget \
     libfmt-dev \
+    curl \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY ./install_securejoin.sh\
-    ./install_volepsi.sh\
-    /home/FPSI/
+COPY install_securejoin.sh\
+    install_volepsi.sh\
+    /workspace/
+
 RUN chmod +x install_securejoin.sh && \
     ./install_securejoin.sh
 
@@ -44,9 +45,9 @@ COPY ./CMakeLists.txt\
     ./bench_fpsi_prefix.sh\
     ./bench_fmap_offline.sh\
     ./bench_fmap_prefix_offline.sh\
-    /home/FPSI/
-COPY ./include/ /home/FPSI/include/
-COPY ./src/ /home/FPSI/src/
+    /workspace/
+COPY ./include/ /workspace/include/
+COPY ./src/ /workspace/src/
 RUN chmod +x *.sh
 
 RUN mkdir -p build && \
