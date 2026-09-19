@@ -20,7 +20,6 @@ cp ./out/build/linux/volePSI/config.h ../out/install/include/volePSI
 cd ..
 rm -rf volepsi
 
-cd ..
 }
 
 install_securejoin() {
@@ -40,8 +39,6 @@ cd ..
 python3 build.py --install=../out/install -D SECUREJOIN_ENABLE_BOOST=ON -D SODIUM_MONTGOMERY=false -D ENABLE_BITPOLYMUL=false 
 cd ..
 rm -rf secure-join
-
-cd ..
 }
 
 

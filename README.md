@@ -39,8 +39,7 @@ libfmt-dev
 From the project root directory:
 
 ```bash
-./install_securejoin.sh
-./install_volepsi.sh
+./shell_install_dependencies.sh
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j

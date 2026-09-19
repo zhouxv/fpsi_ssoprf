@@ -112,10 +112,10 @@ if [[ ! -x "${FPSI_BIN}" ]]; then
 fi
 
 # ============================================================
-# Read the current network configuration.
+# Read current network configuration.
 #
-# shell_config_network.sh is responsible for changing the
-# network environment. This script only reads its metadata.
+# shell_config_network.sh changes the network environment.
+# This script only reads the metadata.
 # ============================================================
 
 network_profile="unknown"
@@ -153,59 +153,38 @@ timestamp="$(date +%Y%m%d_%H%M%S)"
 
 output_file="${SCRIPT_DIR}/fpsi_prefix_${mode}_${network_profile}_${timestamp}.csv"
 
-echo "============================================================"
-echo " Prefix-FPSI Benchmark"
-echo "============================================================"
-echo
-echo "Protocol : ${protocol} (fpsi-prefix)"
+echo "Prefix-FPSI Benchmark"
+echo "Protocol : ${protocol}"
 echo "Mode     : ${mode}"
-echo
 echo "Metric   : ${metrics[*]}"
 echo "nn       : ${ns[*]}"
 echo "Dim      : ${dims[*]}"
 echo "Delta    : ${deltas[*]}"
 echo "Try      : ${num_try}"
-echo
 echo "Cases    : ${case_count}"
+echo "Network  : ${network_profile}"
+echo "Rate     : ${bandwidth}"
+echo "RTT      : ${rtt}"
+echo "Output   : ${output_file}"
 echo
-echo "Network:"
-echo "  Profile   : ${network_profile}"
-echo "  Interface : ${network_interface}"
-echo "  Rate      : ${bandwidth}"
-echo "  RTT       : ${rtt}"
-echo
-echo "Output:"
-echo "  ${output_file}"
-echo
+
+# ============================================================
+# Result header.
+#
+# Each following benchmark result should occupy exactly one line.
+# ============================================================
 
 printf '%s\n' \
   "[Protocol] [Metric] [Dim] [Delta] [Size] [Offline_Com.(MB)] [Offline(s)] [Online_Com.(MB)] [Online(s)] [Total_Com.(MB)] [Total(s)]"
-
-echo
 
 # ============================================================
 # Run benchmark matrix.
 # ============================================================
 
-current_case=0
-
 for metric in "${metrics[@]}"; do
   for nn in "${ns[@]}"; do
     for dim in "${dims[@]}"; do
       for delta in "${deltas[@]}"; do
-
-        current_case=$((current_case + 1))
-
-        echo
-        echo "------------------------------------------------------------"
-        printf '[%d/%d] metric=%s nn=%s dim=%s delta=%s\n' \
-          "${current_case}" \
-          "${case_count}" \
-          "${metric}" \
-          "${nn}" \
-          "${dim}" \
-          "${delta}"
-        echo "------------------------------------------------------------"
 
         "${FPSI_BIN}" \
           -p "${protocol}" \
@@ -227,11 +206,4 @@ done
 # ============================================================
 
 echo
-echo "============================================================"
-echo " Benchmark complete"
-echo "============================================================"
-echo
-echo "Mode   : ${mode}"
-echo "Cases  : ${case_count}"
-echo "Output : ${output_file}"
-echo
+echo "Results written to: ${output_file}"
