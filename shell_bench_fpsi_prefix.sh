@@ -21,7 +21,7 @@ FPSI_BIN="${SCRIPT_DIR}/build/fpsi"
 protocol=4
 metrics=(0 1 2)
 ns=(8 12 16)
-dims=(2 6 10 15)
+dims=(2 6 10)
 deltas=(10 60 250)
 matching_points=7
 num_try=3
@@ -32,7 +32,7 @@ Usage:
   ${0##*/} [-m values...] [-nn values...] [-d values...]
              [-delta values...] [-i value] [-try value]
 
-Defaults: protocol=4 (fpsi-prefix), m=(0 1 2), nn=(8 12 16), d=(2 6 10 15),
+Defaults: protocol=4 (fpsi-prefix), m=(0 1 2), nn=(8 12 16), d=(2 6 10),
           delta=(10 60 250), i=7, try=3
 Metric:   0=Linf, 1=L1, 2=L2
 

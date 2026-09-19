@@ -26,25 +26,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY install_securejoin.sh\
-    install_volepsi.sh\
+COPY shell_install_dependencies.sh \
     /workspace/
 
-RUN chmod +x install_securejoin.sh && \
-    ./install_securejoin.sh
+RUN chmod +x shell_install_dependencies.sh && \
+    ./shell_install_dependencies.sh
 
-RUN chmod +x install_volepsi.sh && \
-    ./install_volepsi.sh
-
-COPY ./CMakeLists.txt\
-    ./throttle.sh\
-    ./README.md\
-    ./bench_fmap.sh\
-    ./bench_fmap_prefix.sh\
-    ./bench_fpsi.sh\
-    ./bench_fpsi_prefix.sh\
-    ./bench_fmap_offline.sh\
-    ./bench_fmap_prefix_offline.sh\
+COPY ./CMakeLists.txt \
+    ./README.md \
+    ./shell_bench_fpsi_prefix.sh \
+    ./shell_config_network.sh \
     /workspace/
 COPY ./include/ /workspace/include/
 COPY ./src/ /workspace/src/
