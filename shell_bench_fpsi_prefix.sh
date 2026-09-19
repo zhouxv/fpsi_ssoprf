@@ -1,83 +1,237 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prefix-FPSI experiment script.
+# ============================================================
+# Prefix-FPSI benchmark runner
 #
-# Scalar syntax: -i <matching-points> -try <count>
-# List syntax:   -m <values...> -nn <values...> -d <values...>
-#                -delta <values...>
-# A list ends when the next token beginning with '-' is encountered.
-# Example: ./bench_fpsi_prefix.sh -m 0 1 -nn 8 12 -d 2 6 -delta 10 60 -i 7
+# Usage:
+#   ./shell_run_bench_fpsi.sh quick
+#   ./shell_run_bench_fpsi.sh full
 #
-# The script builds the experiment matrix only. Argument validation belongs to
-# the fpsi executable so every entry point follows the same validation rules.
-# Protocol 4 is fixed, and every invocation creates a timestamped CSV beside
-# this script; users do not select a protocol or output path here.
+# Default:
+#   full
+#
+# Protocol:
+#   p = 4 (fpsi-prefix)
+#
+# Metric:
+#   0 = Linf
+#   1 = L1
+#   2 = L2
+# ============================================================
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 FPSI_BIN="${SCRIPT_DIR}/build/fpsi"
+NETWORK_SCRIPT="${SCRIPT_DIR}/shell_config_network.sh"
 
-# Defaults can be replaced by the command-line options documented above.
 protocol=4
-metrics=(0 1 2)
-ns=(8 12 16)
-dims=(2 6 10)
-deltas=(10 60 250)
 matching_points=7
-num_try=3
+interface="lo"
 
-print_help() {
-  cat <<EOF
+mode="${1:-full}"
+
+# ============================================================
+# Select benchmark mode.
+# ============================================================
+
+case "${mode}" in
+  quick)
+    metrics=(0 1 2)
+    ns=(12)
+    dims=(2 6 10)
+    deltas=(10 250)
+    num_try=1
+    ;;
+
+  full)
+    metrics=(0 1 2)
+    ns=(8 12 16)
+    dims=(2 6 10)
+    deltas=(10 60 250)
+    num_try=3
+    ;;
+
+  -h|--help)
+    cat <<EOF
 Usage:
-  ${0##*/} [-m values...] [-nn values...] [-d values...]
-             [-delta values...] [-i value] [-try value]
+  ${0##*/} [quick|full]
 
-Defaults: protocol=4 (fpsi-prefix), m=(0 1 2), nn=(8 12 16), d=(2 6 10),
-          delta=(10 60 250), i=7, try=3
-Metric:   0=Linf, 1=L1, 2=L2
+Modes:
 
-A timestamped CSV file is always created beside this script.
+  quick
+    metric = 0 1 2
+    nn     = 12
+    dim    = 2 6 10
+    delta  = 10 250
+    try    = 1
+
+    Total:
+      3 x 1 x 3 x 2 = 18 cases
+
+  full
+    metric = 0 1 2
+    nn     = 8 12 16
+    dim    = 2 6 10
+    delta  = 10 60 250
+    try    = 3
+
+    Total:
+      3 x 3 x 3 x 3 = 81 cases
+
+Examples:
+
+  ./shell_run_bench_fpsi.sh quick
+
+  ./shell_run_bench_fpsi.sh full
+
 EOF
-}
+    exit 0
+    ;;
 
-# Parse only the options used to construct the experiment matrix.
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  -m) shift; metrics=(); while [[ $# -gt 0 && "$1" != -* ]]; do metrics+=("$1"); shift; done ;;
-  -nn) shift; ns=(); while [[ $# -gt 0 && "$1" != -* ]]; do ns+=("$1"); shift; done ;;
-  -d) shift; dims=(); while [[ $# -gt 0 && "$1" != -* ]]; do dims+=("$1"); shift; done ;;
-  -delta) shift; deltas=(); while [[ $# -gt 0 && "$1" != -* ]]; do deltas+=("$1"); shift; done ;;
-  -i) matching_points="$2"; shift 2 ;;
-  -try) num_try="$2"; shift 2 ;;
-  -h | -help) print_help; exit 0 ;;
-  *) shift ;;
-  esac
-done
+  *)
+    echo "Error: invalid mode '${mode}'." >&2
+    echo "Expected: quick or full" >&2
+    echo >&2
+    echo "Usage:" >&2
+    echo "  ${0##*/} [quick|full]" >&2
+    exit 1
+    ;;
+esac
 
-# Check only the build artifact; the executable checks benchmark arguments.
+# ============================================================
+# Check benchmark binary.
+# ============================================================
+
 if [[ ! -x "${FPSI_BIN}" ]]; then
-  echo "Benchmark binary not found or not executable: ${FPSI_BIN}" >&2
+  echo "Error: benchmark binary not found or not executable:" >&2
+  echo "  ${FPSI_BIN}" >&2
+  echo >&2
+  echo "Build the project first." >&2
   exit 1
 fi
 
-# Use a protocol-specific filename and keep every result beside this script.
-output_file="${SCRIPT_DIR}/fpsi_prefix_results_$(date +%Y%m%d_%H%M%S).csv"
+# ============================================================
+# Read the current network configuration.
+#
+# shell_config_network.sh is responsible for changing the
+# network environment. This script only reads its metadata.
+# ============================================================
 
-printf "[Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Online(s)]\n"
+network_profile="unknown"
+network_interface="${interface}"
+bandwidth="unknown"
+rtt="unknown"
 
-# Execute one Cartesian-product entry and append its row to the same CSV file.
-run_case() {
-  local metric="$1" nn="$2" dim="$3" delta="$4"
-  local args=(-p "${protocol}" -nn "${nn}" -d "${dim}" -delta "${delta}"
-              -i "${matching_points}" -try "${num_try}" -m "${metric}"
-              -out "${output_file}")
-  "${FPSI_BIN}" "${args[@]}"
-}
+if [[ -x "${NETWORK_SCRIPT}" ]]; then
+  network_metadata="$(
+    "${NETWORK_SCRIPT}" metadata --interface "${interface}" 2>/dev/null || true
+  )"
 
-for metric in "${metrics[@]}"; do for nn in "${ns[@]}"; do
-  for dim in "${dims[@]}"; do for delta in "${deltas[@]}"; do
-    run_case "${metric}" "${nn}" "${dim}" "${delta}"
-  done; done
-done; done
+  if [[ -n "${network_metadata}" ]]; then
+    IFS=$'\t' read -r \
+      network_profile \
+      network_interface \
+      bandwidth \
+      rtt \
+      <<< "${network_metadata}"
+  fi
+fi
 
-printf "Results written to %s\n" "${output_file}"
+# ============================================================
+# Benchmark information.
+# ============================================================
+
+case_count=$((
+  ${#metrics[@]} *
+  ${#ns[@]} *
+  ${#dims[@]} *
+  ${#deltas[@]}
+))
+
+timestamp="$(date +%Y%m%d_%H%M%S)"
+
+output_file="${SCRIPT_DIR}/fpsi_prefix_${mode}_${network_profile}_${timestamp}.csv"
+
+echo "============================================================"
+echo " Prefix-FPSI Benchmark"
+echo "============================================================"
+echo
+echo "Protocol : ${protocol} (fpsi-prefix)"
+echo "Mode     : ${mode}"
+echo
+echo "Metric   : ${metrics[*]}"
+echo "nn       : ${ns[*]}"
+echo "Dim      : ${dims[*]}"
+echo "Delta    : ${deltas[*]}"
+echo "Try      : ${num_try}"
+echo
+echo "Cases    : ${case_count}"
+echo
+echo "Network:"
+echo "  Profile   : ${network_profile}"
+echo "  Interface : ${network_interface}"
+echo "  Rate      : ${bandwidth}"
+echo "  RTT       : ${rtt}"
+echo
+echo "Output:"
+echo "  ${output_file}"
+echo
+
+printf '%s\n' \
+  "[Protocol] [Metric] [Dim] [Delta] [Size] [Offline_Com.(MB)] [Offline(s)] [Online_Com.(MB)] [Online(s)] [Total_Com.(MB)] [Total(s)]"
+
+echo
+
+# ============================================================
+# Run benchmark matrix.
+# ============================================================
+
+current_case=0
+
+for metric in "${metrics[@]}"; do
+  for nn in "${ns[@]}"; do
+    for dim in "${dims[@]}"; do
+      for delta in "${deltas[@]}"; do
+
+        current_case=$((current_case + 1))
+
+        echo
+        echo "------------------------------------------------------------"
+        printf '[%d/%d] metric=%s nn=%s dim=%s delta=%s\n' \
+          "${current_case}" \
+          "${case_count}" \
+          "${metric}" \
+          "${nn}" \
+          "${dim}" \
+          "${delta}"
+        echo "------------------------------------------------------------"
+
+        "${FPSI_BIN}" \
+          -p "${protocol}" \
+          -m "${metric}" \
+          -nn "${nn}" \
+          -d "${dim}" \
+          -delta "${delta}" \
+          -i "${matching_points}" \
+          -try "${num_try}" \
+          -out "${output_file}"
+
+      done
+    done
+  done
+done
+
+# ============================================================
+# Done.
+# ============================================================
+
+echo
+echo "============================================================"
+echo " Benchmark complete"
+echo "============================================================"
+echo
+echo "Mode   : ${mode}"
+echo "Cases  : ${case_count}"
+echo "Output : ${output_file}"
+echo

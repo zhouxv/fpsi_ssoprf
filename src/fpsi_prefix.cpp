@@ -465,7 +465,7 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   }
 
   oc::Timer time;
-  time.setTimePoint("offline begin");
+  auto offlineBegin = time.setTimePoint("offline begin");
 
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
@@ -492,6 +492,14 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   receiverOffline.join();
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
+
+  const auto offlineTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(s - offlineBegin)
+          .count() /
+      double(1000 * 1000);
+
+  // The current offline phase performs no communication.
+  const double offlineComm = 0.0;
 
   auto sock = coproto::AsioSocket::makePair();
   auto sock2 = coproto::AsioSocket::makePair();
@@ -721,19 +729,26 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
 
   auto e = time.setTimePoint("OT done");
 
-  auto comm = (sock[0].bytesReceived() + sock[0].bytesSent() +
-               sock2[0].bytesReceived() + sock2[0].bytesSent()) /
-              1024.0 / 1024.0;
-  auto comp =
+  auto onlineComm = (sock[0].bytesReceived() + sock[0].bytesSent() +
+                     sock2[0].bytesReceived() + sock2[0].bytesSent()) /
+                    1024.0 / 1024.0;
+
+  auto onlineTime =
       std::chrono::duration_cast<std::chrono::microseconds>(e - s).count() /
       double(1000 * 1000);
 
-  comp /= numTry;
-  comm /= numTry;
+  onlineComm /= numTry;
+  onlineTime /= numTry;
 
-  std::cout << std::format(
-                   "[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} {:^10.3f}",
-                   "Linf", d, delta, n, comm, comp)
+  const double totalComm = offlineComm + onlineComm;
+  const double totalTime = offlineTime + onlineTime;
+
+  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
+                           "{:^16.3f} {:^10.3f} "
+                           "{:^15.3f} {:^10.3f} "
+                           "{:^14.3f} {:^10.3f}",
+                           "Linf", d, delta, n, offlineComm, offlineTime,
+                           onlineComm, onlineTime, totalComm, totalTime)
             << std::endl;
 
   if (cmd.isSet("out")) {
@@ -745,10 +760,16 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
       throw std::runtime_error("failed to open result file: " + outputPath);
     }
     if (writeHeader) {
-      output << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Online(s)\n";
+      output << "Protocol,Metric,Dim,Delta,Size,"
+                "Offline_Com.(MB),Offline(s),"
+                "Online_Com.(MB),Online(s),"
+                "Total_Com.(MB),Total(s)\n";
     }
+
     output << "fpsi-prefix,Linf," << d << ',' << delta << ',' << n << ','
-           << std::fixed << std::setprecision(3) << comm << ',' << comp << '\n';
+           << std::fixed << std::setprecision(3) << offlineComm << ','
+           << offlineTime << ',' << onlineComm << ',' << onlineTime << ','
+           << totalComm << ',' << totalTime << '\n';
   }
 
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
@@ -842,7 +863,7 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   }
 
   oc::Timer time;
-  time.setTimePoint("offline begin");
+  auto offlineBegin = time.setTimePoint("offline begin");
 
   AltModPrf::KeyType senderKey = AltModPrf::KeyType({
       block(0, 1),
@@ -869,6 +890,13 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   receiverOffline.join();
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
+
+  const auto offlineTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(s - offlineBegin)
+          .count() /
+      double(1000 * 1000);
+
+  const double offlineComm = 0.0;
 
   auto sock = coproto::AsioSocket::makePair();
   auto sock2 = coproto::AsioSocket::makePair();
@@ -1296,20 +1324,27 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
 
   auto e = time.setTimePoint("OT done");
 
-  auto comm = (sock[0].bytesReceived() + sock[0].bytesSent() +
-               sock2[0].bytesReceived() + sock2[0].bytesSent()) /
-              1024.0 / 1024.0;
-  auto comp =
+  auto onlineComm = (sock[0].bytesReceived() + sock[0].bytesSent() +
+                     sock2[0].bytesReceived() + sock2[0].bytesSent()) /
+                    1024.0 / 1024.0;
+
+  auto onlineTime =
       std::chrono::duration_cast<std::chrono::microseconds>(e - s).count() /
       double(1000 * 1000);
 
-  comp /= numTry;
-  comm /= numTry;
+  onlineComm /= numTry;
+  onlineTime /= numTry;
+
+  const double totalComm = offlineComm + onlineComm;
+  const double totalTime = offlineTime + onlineTime;
 
   const auto metric = lp == 1 ? "L1" : "L2";
-  std::cout << std::format(
-                   "[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} {:^10.3f} {:^10.3f}",
-                   metric, d, delta, n, comm, comp)
+  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
+                           "{:^16.3f} {:^10.3f} "
+                           "{:^15.3f} {:^10.3f} "
+                           "{:^14.3f} {:^10.3f}",
+                           metric, d, delta, n, offlineComm, offlineTime,
+                           onlineComm, onlineTime, totalComm, totalTime)
             << std::endl;
 
   if (cmd.isSet("out")) {
@@ -1321,11 +1356,16 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
       throw std::runtime_error("failed to open result file: " + outputPath);
     }
     if (writeHeader) {
-      output << "Protocol,Metric,Dim,Delta,Size,Com.(MB),Online(s)\n";
+      output << "Protocol,Metric,Dim,Delta,Size,"
+                "Offline_Com.(MB),Offline(s),"
+                "Online_Com.(MB),Online(s),"
+                "Total_Com.(MB),Total(s)\n";
     }
+
     output << "fpsi-prefix," << metric << ',' << d << ',' << delta << ',' << n
-           << ',' << std::fixed << std::setprecision(3) << comm << ',' << comp
-           << '\n';
+           << ',' << std::fixed << std::setprecision(3) << offlineComm << ','
+           << offlineTime << ',' << onlineComm << ',' << onlineTime << ','
+           << totalComm << ',' << totalTime << '\n';
   }
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
   // sock2[0].bytesReceived() + sock2[0].bytesSent()) / 1024.0 / 1024.0 << " MB,
