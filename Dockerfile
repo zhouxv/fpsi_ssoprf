@@ -4,26 +4,37 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /workspace
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    openssl \
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     cmake \
-    git \
-    libtool \
     autoconf \
     automake \
-    pkg-config \
-    iproute2 \
-    python3 \
-    sudo \
-    nasm \
-    libssl-dev \
     libgmp-dev \
+    libspdlog-dev \
+    libtool \
+    libssl-dev \
+    libmpfr-dev \
     libfmt-dev \
+    nasm \
+    python3 \
+    python3-pip \
+    python3-venv \
+    vim \
+    git \
+    iproute2 \
+    net-tools \
     curl \
+    jq \
+    # openssl \
+    # pkg-config \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSL https://raw.githubusercontent.com/thombashi/tcconfig/master/scripts/installer.sh | bash
 
 
 COPY shell_install_dependencies.sh \
