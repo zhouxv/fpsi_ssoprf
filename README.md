@@ -53,11 +53,16 @@ Use Docker for an isolated or reproducible build environment:
 
 ```bash
 docker build -t fpsi_ssoprf .
+
 docker tag fpsi_ssoprf:latest blueobsidian/fpsi_ssoprf:latest
+docker push blueobsidian/fpsi_ssoprf:latest
+
+docker tag fpsi_ssoprf:latest blueobsidian/fpsi_cmp_artifact_exp11:latest
+docker push blueobsidian/fpsi_cmp_artifact_exp11:latest
 
 docker run -it --name <your-container-name> --cap-add=NET_ADMIN --memory=512g <your-image-name>
 docker run -dit --name fpsi_ssoprf --cap-add=NET_ADMIN fpsi_ssoprf:latest
-docker pull blueobsidian/fpsi_ssoprf:latest
+
 
 docker exec -it <your-container-name> bash
 ```
@@ -93,11 +98,14 @@ Enable prefix optimization:
 ./build/fpsi -p 4 -m 0 -nn 8 -d 8 -delta 16 -v 1
 ```
 
-Protocols `1` through `4` print online results with the following columns:
+Protocols `1` through `3` print online results with the following columns:
 
 ```text
 [Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Online(s)]
 ```
+
+Protocol `4` prints offline, online, and total communication and time, matching
+its CSV columns documented above.
 
 Protocols `5` and `6` run only the offline preprocessing and print:
 

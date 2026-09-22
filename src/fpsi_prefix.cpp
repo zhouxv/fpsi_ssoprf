@@ -743,7 +743,7 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   const double totalComm = offlineComm + onlineComm;
   const double totalTime = offlineTime + onlineTime;
 
-  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
+  std::cout << std::format("[ssoprf-fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
                            "{:^16.3f} {:^10.3f} "
                            "{:^15.3f} {:^10.3f} "
                            "{:^14.3f} {:^10.3f}",
@@ -766,7 +766,7 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
                 "Total_Com.(MB),Total(s)\n";
     }
 
-    output << "fpsi-prefix,Linf," << d << ',' << delta << ',' << n << ','
+    output << "ssoprf-fpsi-prefix,Linf," << d << ',' << delta << ',' << n << ','
            << std::fixed << std::setprecision(3) << offlineComm << ','
            << offlineTime << ',' << onlineComm << ',' << onlineTime << ','
            << totalComm << ',' << totalTime << '\n';
@@ -1339,7 +1339,7 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   const double totalTime = offlineTime + onlineTime;
 
   const auto metric = lp == 1 ? "L1" : "L2";
-  std::cout << std::format("[fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
+  std::cout << std::format("[ssoprf-fpsi-prefix] {:^6} {:^5} {:^5} {:^5} "
                            "{:^16.3f} {:^10.3f} "
                            "{:^15.3f} {:^10.3f} "
                            "{:^14.3f} {:^10.3f}",
@@ -1362,10 +1362,10 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
                 "Total_Com.(MB),Total(s)\n";
     }
 
-    output << "fpsi-prefix," << metric << ',' << d << ',' << delta << ',' << n
-           << ',' << std::fixed << std::setprecision(3) << offlineComm << ','
-           << offlineTime << ',' << onlineComm << ',' << onlineTime << ','
-           << totalComm << ',' << totalTime << '\n';
+    output << "ssoprf-fpsi-prefix," << metric << ',' << d << ',' << delta << ','
+           << n << ',' << std::fixed << std::setprecision(3) << offlineComm
+           << ',' << offlineTime << ',' << onlineComm << ',' << onlineTime
+           << ',' << totalComm << ',' << totalTime << '\n';
   }
   // std::cout << "comm: " << (sock[0].bytesReceived() + sock[0].bytesSent() +
   // sock2[0].bytesReceived() + sock2[0].bytesSent()) / 1024.0 / 1024.0 << " MB,

@@ -29,28 +29,22 @@ RUN apt-get update && \
     net-tools \
     curl \
     jq \
-    # openssl \
-    # pkg-config \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sSL https://raw.githubusercontent.com/thombashi/tcconfig/master/scripts/installer.sh | bash
 
-
-COPY shell_install_dependencies.sh \
-    /workspace/
-
-RUN chmod +x shell_install_dependencies.sh && \
-    ./shell_install_dependencies.sh
+COPY --chmod=755 ./shell_install_dependencies.sh /workspace/shell_install_dependencies.sh
+RUN ./shell_install_dependencies.sh
 
 COPY ./CMakeLists.txt \
     ./README.md \
-    ./shell_bench_fpsi_prefix.sh \
-    ./shell_config_network.sh \
     /workspace/
 COPY ./include/ /workspace/include/
 COPY ./src/ /workspace/src/
-RUN chmod +x *.sh
+
+COPY --chmod=755 ./shell_run_bench_fpsi.sh /workspace/shell_run_bench_fpsi.sh
+COPY --chmod=755 ./shell_config_network.sh /workspace/shell_config_network.sh
 
 RUN mkdir -p build && \
     cd build && \

@@ -96,10 +96,13 @@ bool validateExperimentArgs(const oc::CLP &cmd, int protocol, int metric) {
   }
 
   if (protocol < 1 || protocol > 6) {
-    std::cerr << "invalid protocol: use -p 1 (fmap), -p 2 (fmap-prefix), "
-                 "-p 3 (fpsi), -p 4 (fpsi-prefix), -p 5 (fmap offline), "
-                 "or -p 6 (fmap-prefix offline)"
-              << std::endl;
+    std::cerr
+        << "invalid protocol: use -p 1 (ssoprf-fmap), -p 2 "
+           "(ssoprf-fmap-prefix), "
+           "-p 3 (ssoprf-fpsi), -p 4 (ssoprf-fpsi-prefix), -p 5 (ssoprf-fmap "
+           "offline), "
+           "or -p 6 (ssoprf-fmap-prefix offline)"
+        << std::endl;
     return false;
   }
 
