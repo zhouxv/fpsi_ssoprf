@@ -405,6 +405,8 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   int verbose = cmd.getOr("v", 0);
   int numTry = cmd.getOr("try", 1);
   u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
+  const std::string ip = cmd.getOr<std::string>("ip", "127.0.0.1");
+  const uint64_t port = cmd.getOr<uint64_t>("port", 1212);
 
   shift = cmd.getOr("s", 0);
 
@@ -501,8 +503,24 @@ void fuzzyPsiPrefix(const oc::CLP &cmd) {
   // The current offline phase performs no communication.
   const double offlineComm = 0.0;
 
-  auto sock = coproto::AsioSocket::makePair();
-  auto sock2 = coproto::AsioSocket::makePair();
+  const std::string addr = ip + ":" + std::to_string(port);
+  const std::string addr2 = ip + ":" + std::to_string(port + 1);
+
+  std::array<coproto::AsioSocket, 2> sock;
+  std::array<coproto::AsioSocket, 2> sock2;
+
+  std::thread receiver_thread([&]() {
+    sock[0] = coproto::asioConnect(addr, true);
+    sock2[0] = coproto::asioConnect(addr2, true);
+  });
+
+  std::thread sender_thread([&]() {
+    sock[1] = coproto::asioConnect(addr, false);
+    sock2[1] = coproto::asioConnect(addr2, false);
+  });
+
+  receiver_thread.join();
+  sender_thread.join();
 
   for (int tryIdx = 0; tryIdx < numTry; tryIdx++) {
     std::vector<block> rand_R_j(n);
@@ -786,6 +804,8 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
   int lp = cmd.getOr("m", 2);
   int verbose = cmd.getOr("v", 0);
   u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
+  const std::string ip = cmd.getOr<std::string>("ip", "127.0.0.1");
+  const uint64_t port = cmd.getOr<uint64_t>("port", 1212);
 
   u64 delta_p = std::pow(delta, lp);
 
@@ -898,8 +918,24 @@ void fuzzyPsiLpPrefix(const oc::CLP &cmd) {
 
   const double offlineComm = 0.0;
 
-  auto sock = coproto::AsioSocket::makePair();
-  auto sock2 = coproto::AsioSocket::makePair();
+  const std::string addr = ip + ":" + std::to_string(port);
+  const std::string addr2 = ip + ":" + std::to_string(port + 1);
+
+  std::array<coproto::AsioSocket, 2> sock;
+  std::array<coproto::AsioSocket, 2> sock2;
+
+  std::thread receiver_thread([&]() {
+    sock[0] = coproto::asioConnect(addr, true);
+    sock2[0] = coproto::asioConnect(addr2, true);
+  });
+
+  std::thread sender_thread([&]() {
+    sock[1] = coproto::asioConnect(addr, false);
+    sock2[1] = coproto::asioConnect(addr2, false);
+  });
+
+  receiver_thread.join();
+  sender_thread.join();
 
   for (int tryIdx = 0; tryIdx < numTry; tryIdx++) {
     std::vector<block> rand_R_j(n);
@@ -1384,6 +1420,8 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
   u64 interSize = cmd.getOr<u64>("i", std::min<u64>(7, n));
   int numTry = cmd.getOr("try", 1);
   shift = cmd.getOr("s", 0);
+  const std::string ip = cmd.getOr<std::string>("ip", "127.0.0.1");
+  const uint64_t port = cmd.getOr<uint64_t>("port", 1212);
 
   u64 delta_p = std::pow(delta, lp);
 
@@ -1485,8 +1523,24 @@ void fuzzyMapPrefix(const oc::CLP &cmd) {
 
   auto s = time.setTimePoint("offline preprocess OKVS done");
 
-  auto sock = coproto::AsioSocket::makePair();
-  auto sock2 = coproto::AsioSocket::makePair();
+  const std::string addr = ip + ":" + std::to_string(port);
+  const std::string addr2 = ip + ":" + std::to_string(port + 1);
+
+  std::array<coproto::AsioSocket, 2> sock;
+  std::array<coproto::AsioSocket, 2> sock2;
+
+  std::thread receiver_thread([&]() {
+    sock[0] = coproto::asioConnect(addr, true);
+    sock2[0] = coproto::asioConnect(addr2, true);
+  });
+
+  std::thread sender_thread([&]() {
+    sock[1] = coproto::asioConnect(addr, false);
+    sock2[1] = coproto::asioConnect(addr2, false);
+  });
+
+  receiver_thread.join();
+  sender_thread.join();
 
   for (int tryIdx = 0; tryIdx < numTry; tryIdx++) {
     std::vector<block> rand_R_j(n);
