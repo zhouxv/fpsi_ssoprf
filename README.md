@@ -4,68 +4,65 @@ This repository provides the implementation and build scripts for fuzzy private 
 
 > Note: This project is experimental and primarily intended for research use. Adjust parameters according to your hardware and dataset sizes.
 
-## Location of Main Functionality
+## Build and Run with Docker
 
-- `src/*.cpp` contains the implementations of our building blocks such as `si-OPRF`, `so-OPRF`, `so-OPPRF` and other MPC components
-- `src/fpsi.cpp` contains the implementations of basic `fuzzy mapping`, `fuzzy PSI` protocol
-- `src/fpsi_prefix.cpp` contains the implementations of **prefix-optimized** `fuzzy mapping`, `fuzzy PSI` protocol
-
-## Requirements
-
-- Linux on **AMD64** Only
-- `cmake`, `make`, `g++ 13`
-- Docker (optional, for isolated builds)
-- Additional third-party libraries [secure-join](https://github.com/Visa-Research/secure-join.git) and [volePSI](https://github.com/ladnir/volepsi.git) (can be installed by the scripts [install_securejoin.sh, install_volepsi.sh])
-
-- **Dependencies :**
+Run the following from this repository's root directory, which contains the
+`Dockerfile`. The build installs dependencies and compiles `build/fpsi`;
+no prebuilt FPSI image is required.
 
 ```bash
-build-essential
-cmake
-git 
-libtool 
-iproute2 
-python3 
-sudo 
-nasm 
-libssl-dev 
-libgmp-dev 
-wget 
-libfmt-dev
+docker build -t fpsi_cmp_artifact_exp11:latest .
+docker run -d --cap-add=NET_ADMIN \
+  --name fpsi_cmp_exp11 \
+  fpsi_cmp_artifact_exp11:latest \
+  sleep infinity
+docker exec -it fpsi_cmp_exp11 bash
 ```
 
-## Local build
+The container's project directory is `/workspace`, and the executable is
+`/workspace/build/fpsi`. Run the benchmark commands below inside this
+container. `NET_ADMIN` is needed for LAN/WAN network configuration. Building
+requires internet access to download dependencies; pushing an image to a
+registry is not required.
 
-From the project root directory:
+## Artifact comparison benchmarks (Exp11)
+
+This is the so-OPPRF-based fuzzy PSI baseline (Exp11) for the comparison
+artifact. The benchmark script uses the prefix-optimized protocol (`-p 4`).
+Run the following from the project root after building the executable:
 
 ```bash
-./shell_install_dependencies.sh
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j
-
-# The executable will be located at ./build/fpsi
+./shell_config_network.sh lan
+./shell_run_bench_fpsi.sh
+./shell_run_bench_fpsi.sh --preset full
 ```
 
-## Docker (optional)
+Quick is the default and is equivalent to `--preset quick`. The presets
+match the camera-ready comparison paper's thresholds:
 
-Use Docker for an isolated or reproducible build environment:
+| Parameter | Quick | Full |
+|---|---|---|
+| Metrics | Linf, L1, L2 | Linf, L1, L2 |
+| Set size N | 2^12 | 2^8, 2^12, 2^16 |
+| Dimension d | 2, 6, 10 | 2, 6, 10 |
+| Threshold delta | 60, 250 | 60, 250 |
+| Trials per combination | 1 | 3 |
+| Combinations | 18 | 54 |
+
+Both LAN (10 Gbps, no added delay) and WAN (100 Mbps, 80 ms target RTT) are
+paper settings. Run Ours and both baselines under the same selected profile:
 
 ```bash
-docker build -t fpsi_ssoprf .
-
-docker tag fpsi_ssoprf:latest blueobsidian/fpsi_ssoprf:latest
-docker push blueobsidian/fpsi_ssoprf:latest
-
-docker tag fpsi_ssoprf:latest blueobsidian/fpsi_cmp_artifact_exp11:latest
-docker push blueobsidian/fpsi_cmp_artifact_exp11:latest
-
-docker run -it --name <your-container-name> --cap-add=NET_ADMIN --memory=512g <your-image-name>
-docker run -dit --name fpsi_ssoprf --cap-add=NET_ADMIN fpsi_ssoprf:latest
-
-
-docker exec -it <your-container-name> bash
+./shell_config_network.sh wan
+./shell_run_bench_fpsi.sh --preset quick
+./shell_run_bench_fpsi.sh --preset full
 ```
+
+Use `./shell_run_bench_fpsi.sh --help` and `./shell_config_network.sh --help`
+for options. Explicit experiment options override preset values, for example
+`./shell_run_bench_fpsi.sh --preset full --nn 12 16`. Network configuration
+requires root/sudo locally or `NET_ADMIN` in a container.
+
 
 ## Command-line Options
 
@@ -82,79 +79,6 @@ Below are the commonly used command-line flags. Flags use a leading dash (for ex
 | `-v` | Verbosity | `0`: off (default), `1`: info |
 | `-try` | Number of runs | integer, default `1` |
 | `-out` | CSV result file | optional; no CSV is written when omitted |
-
-
-## Usage Examples
-
-Run a basic fuzzy PSI experiment:
-
-```bash
-./build/fpsi -p 3 -m 0 -nn 8 -d 8 -delta 16 -v 1
-```
-
-Enable prefix optimization:
-
-```bash
-./build/fpsi -p 4 -m 0 -nn 8 -d 8 -delta 16 -v 1
-```
-
-Protocols `1` through `3` print online results with the following columns:
-
-```text
-[Protocol] [Metric] [Dim] [Delta] [Size] [Com.(MB)] [Online(s)]
-```
-
-Protocol `4` prints offline, online, and total communication and time, matching
-its CSV columns documented above.
-
-Protocols `5` and `6` run only the offline preprocessing and print:
-
-```text
-[Protocol] [Dim] [Delta] [Size] [Offline(s)]
-```
-
-`Offline(s)` includes LocalMap/LocalMapPrefix, local PRF evaluation, and OKVS
-encoding. Sender and receiver preprocessing pipelines run concurrently, so the
-result is the wall-clock time until both parties finish. Synthetic input
-generation is excluded. The offline phase performs no communication.
-
-Use `-out` to append a result to a CSV file that Excel can open directly:
-
-```bash
-./build/fpsi -p 3 -m 0 -nn 8 -d 8 -delta 16 -out fpsi.csv
-```
-
-Run the non-prefix offline preprocessing independently:
-
-```bash
-./build/fpsi -p 5 -nn 12 -d 6 -delta 60 -try 3 -out fmap-offline.csv
-```
-
-------------------------------------------------------------------------
-
-## Baseline Implementations
-
-The following baseline implementations are used for comparison.
-
-### Gao et al
-
-[Code](https://github.com/ql70ql70/Fuzzy-Private-Set-Intersection-from-Fuzzy-Mapping) |   [Paper](https://eprint.iacr.org/2024/1462)
-
-Recommended Docker image:
-
-    blueobsidian/gao_artifact:latest
-
-------------------------------------------------------------------------
-
-### Dang et al
-
-[Code](https://github.com/zhouxv/ourFuzzyPSI-C) | [Paper](https://eprint.iacr.org/2025/1796)
-
-Recommended Docker image:
-
-    blueobsidian/fpsi_artifact:latest
-
-------------------------------------------------------------------------
 
 ## Acknowledgements
 
